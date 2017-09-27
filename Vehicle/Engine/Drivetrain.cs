@@ -188,10 +188,7 @@ public class Drivetrain
 
             //currentWheelRPM = gearRatios[CurrentGear] * diffRatio * throttle; //currentGear is still 0
         }
-        // rpm = gearRatios[CurrentGear] * diffRatio * throttle; //currentGear is still 0
-        //speedOnKmh = (2 * Mathf.PI * poweringWheels[0].radius * rpm) * 60; //TODO: the values are so messed up?!
-        //speedRigidMph = speedRigidKmh * 0.62f; // converting kmh to mph //TODO: the values are so messed up?!
-
+       
         //UpdateEngineSound();
     }
 
