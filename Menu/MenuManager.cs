@@ -1,7 +1,5 @@
 ﻿using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
 public class MenuManager : MonoBehaviour
@@ -44,8 +42,9 @@ public class MenuManager : MonoBehaviour
     void Update()
     {
         introTimer -= Time.deltaTime;
-        if (introTimer < 0 && introPanel.gameObject.activeSelf == false && learnToDrivePanel.gameObject.activeSelf == false)
+        if (introTimer < 0 && introPanel.gameObject.activeSelf == false && learnToDrivePanel.gameObject.activeSelf == false && carSelectionPanel.gameObject.activeSelf == false)
         {
+
             OnIntro();
             introTimer = 0;
         }
@@ -56,7 +55,7 @@ public class MenuManager : MonoBehaviour
         }
 
         if (!musicPlaying)
-            StartCoroutine(FadeOut(mainMenuMusic, 2)); //TODO: Not working!? Why does audioSource of the video overrides this?
+            StartCoroutine(FadeOut(mainMenuMusic, 2));
 
         if (Input.GetKeyDown(KeyCode.Escape))
         {
@@ -129,7 +128,7 @@ public class MenuManager : MonoBehaviour
         int song = Random.Range(0, 2);
         if (song == 1)
         {
-            mainClip = (AudioClip)Resources.Load("Music/Menu/12_showcase_lotus_espirit_v8");
+            mainClip = (AudioClip)Resources.Load("Music/Menu/12_showcase_~_lotus_espirit_v8");
         }
         else
         {
@@ -148,7 +147,6 @@ public class MenuManager : MonoBehaviour
         learnToDrivePanel.gameObject.SetActive(true);
 
         musicPlaying = false;
-
     }
 
     /// <summary>
@@ -168,7 +166,4 @@ public class MenuManager : MonoBehaviour
         audioSource.Stop();
         audioSource.volume = startVolume;
     }
-
-
-
 }

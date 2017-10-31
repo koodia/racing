@@ -4,37 +4,21 @@ using System.Collections.Generic;
 using System.Linq;
 using UnityEngine;
 
-//[System.Serializable]
-//public class VehiclePrefab
-//{
-//    [SerializeField]
-//    public CarPrefabName carPrefabName;
-//    public CarCategory category;
-//}
 
 /// <summary>
 /// TODO: Create baseclass for other spawners
 /// </summary>
 [System.Serializable]
-public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
+public class VehicleSpawner : Singleton<VehicleSpawner> //ICargoCreator
 {
     //temp stuff:
     public GameObject racerPrefab; //AIRacer currently
-    //private TrafficWavePatterns wavePatterns = new TrafficWavePatterns();
-    private CargoCreator cargoCreator = new CargoCreator();
+ 
     //public GameObject playerPrefab;
 
     public const string folderInResourcesVehicles = "Vehicles/";
 
     private Dictionary<string, GameObject> allSpawnedVehiclesSoFar = new Dictionary<string, GameObject>(); //TODO: for object pooling. And the list type?
-
-    //[SerializeField]
-    //public PrefabContainer container;
-    //public GameObject[] containerVehicleList;
-    //public VehiclePrefab[] vehicleList;
-    //TODO: public PrefabList staticProps;
-    //TODO: public PrefabList rigidProps;
-
     VehicleStyle vehicleStyle;
     private Transform trafficObject;
     private Transform racersObject;
@@ -42,7 +26,8 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
     public int minDistanceBetweenVehicles = 40;
     public int maxDistanceBetweenVehicles = 120;
     private float currentInstantiationDistance;
-    private const int instantiationHeight = 1;
+    private const int DefaultInstantiationHeight = 1;
+    private float instantiationHeight = DefaultInstantiationHeight;
 
     //These go to GameManager or something like that
     public static int totalNumberOfVehicles = 0;
@@ -55,31 +40,31 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
     [SerializeField]
     public int spawnCarCountMax;
     TrafficVehicleCreator tafficCreator = new TrafficVehicleCreator();
-    //ItemCreator itemCreator = new ItemCreator();
     public Transform[] racers;
 
     //TODO://This will change when 3,2,1 Start! is implemented 
     private const int LaneStarts = 200;
-    private int earlySpawningPos = LaneStarts; // WHAT EVER YOU DO NOOOOOOOOOOOOOOOOOOOOO NOT SET THIS TO ZERO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! Unity has a bug
-    public Vector3 startlineInstantiationPos = new Vector3(-600, 70f, 522); //this cumulates according the opponentCount. A BUG HERE AS WELL: You need to drop the cars high enough!!
-
-    //Some temp aid:
-    private bool laneSpawnLock = false;
-    private float lockTimer = 20;
+    private const int LanePopulationPosStart = 400;
+    private int earlySpawningPos = LaneStarts; // Unity Canvas has a bug, so dont set to zero
+    public Vector3 startlineInstantiationPos = new Vector3(-600, 70f, 522);
     private float rayCastCheckLength = 40;
     private int waitBeforeRelease = 0;
     private int tempCarCountBeginning = 0;
-
     private static int playerId = -1;
 
-    void Awake()
+    //Cargo creation:
+    CargoCreator cargoCreator = new CargoCreator();
+
+
+    public override void Awake()
     {
+        base.Awake();
         lanes = new List<GameObject>(GameObject.FindGameObjectsWithTag("Lane")).OrderBy(go => go.name).ToList();
     }
 
     void Start()
     {
-
+        Debug.Assert(spawnCarCountMax != 0, "VehicleSpawner's spawnCarCountMax needs to be greater than 0 ");
         Init();
     }
 
@@ -94,11 +79,6 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
 
     void Update()
     {
-        lockTimer -= Time.deltaTime;
-        if (lockTimer < 0)
-        {
-            laneSpawnLock = false;
-        }
 
         if (Input.GetKeyDown(KeyCode.Alpha1))
         {
@@ -135,8 +115,62 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
 
         if (Input.GetKeyDown(KeyCode.Comma))
         {
-            StartCoroutine(InstantiateVehicle(6, 500, CarPrefabName.MiniCargoTruck_Prefab)); //One test car
+            StartCoroutine(InstantiateVehicle(6, 500, CarPrefabName.CargoTruck_Prefab)); //One test car
         }
+    }
+
+      /// <summary>
+    /// This is quite tricky. Dont go under 10 seconds or the raycast check will remove it
+    /// </summary>
+    /// <returns></returns>
+    public IEnumerator StartReleasingCars()
+    {
+        yield return new WaitForSeconds(1); //needed
+
+        //Less in the opposite side, meaning rarely
+        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 0));
+        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 1));
+        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 2));
+        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 3));
+
+        //remember to wait a sec
+        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 4));
+        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 5));
+        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 6));
+        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 7));
+
+        yield return null;
+    }
+
+
+    public IEnumerator PopulateVisibleMotorway()
+    {
+        //Less in the opposite side
+        yield return StartCoroutine(PopulateLane(0, LanePopulationPosStart));
+        yield return StartCoroutine(PopulateLane(2, LanePopulationPosStart));
+        yield return StartCoroutine(PopulateLane(3, LanePopulationPosStart));
+
+        yield return StartCoroutine(PopulateLane(4, LanePopulationPosStart));
+        yield return StartCoroutine(PopulateLane(5, LanePopulationPosStart));
+        yield return StartCoroutine(PopulateLane(6, LanePopulationPosStart));
+        yield return StartCoroutine(PopulateLane(7, LanePopulationPosStart));
+
+        //Further as well
+        //Add parameter for cor count to the lane
+        currentInstantiationDistance = 0; //zero this
+
+        //Some a bit further as well
+        yield return StartCoroutine(PopulateLane(4, 4000));  //jump on this lane so, avoid it for now
+        yield return StartCoroutine(PopulateLane(5, 2700));
+        yield return StartCoroutine(PopulateLane(6, 2500));
+        yield return StartCoroutine(PopulateLane(7, 3000));
+
+        yield return StartCoroutine(PopulateLane(4, 6000));  //jump on this lane so, avoid it for now
+        yield return StartCoroutine(PopulateLane(5, 4500));
+        yield return StartCoroutine(PopulateLane(6, 5000));
+        yield return StartCoroutine(PopulateLane(7, 5100));
+
+        //TODO: release them later!
     }
 
     /// <summary>
@@ -161,7 +195,6 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
                 //Debug.Log(hit.transform.name);
                 laneLeftSideFree = false;
                 hit.transform.gameObject.SetActive(false); //remove move it from the way so it wont do any harm
-
             }
         }
         sensorStartPos = new Vector3(lanes[laneIndex].transform.position.x - 5, instantiationHeight - 0.5f, earlySpawningPos - 5);
@@ -174,7 +207,6 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
                 Debug.Log(hit.transform.name);
                 laneRightSideFree = false;
                 hit.transform.gameObject.SetActive(false); //remove move it from the way so it wont do any harm
-
             }
         }
 
@@ -186,8 +218,6 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
 
         return true;
     }
-
-
 
     /// <summary>
     /// TODO: remove hardcodes values!
@@ -226,32 +256,36 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
         go.transform.eulerAngles = new Vector3(0, 90, 0);
         racers[racers.Length - 1] = go.transform; //player starts at last position
 
-        CarData.ModifyAIPrefabToPlayable(go, automaticTransmission, playerId);
+        PlayerController player = go.AddComponent<PlayerController>();
+        player.TransformAIRacerPrefabToPlayable(go, automaticTransmission, playerId);
     }
 
-    private void InstantiateRacer(Vector3 currentInstantiationPos, out GameObject go)
+    private void InstantiateRacer(Vector3 racersInstantiationPos, out GameObject go)
     {
         int startingLane = 7;
         vehicleStyle = tafficCreator.PickRandomRaceVehicleAndStyle();
-        go = Instantiate(Resources.Load(String.Format("{0}{1}", folderInResourcesVehicles, vehicleStyle.racerPrefabTempThing)), currentInstantiationPos, Quaternion.identity, racersObject) as GameObject;
+
+        go = Instantiate(Resources.Load(String.Format("{0}{1}", folderInResourcesVehicles, vehicleStyle.racerPrefabTempThing)), racersInstantiationPos, Quaternion.identity, racersObject) as GameObject;
+
         go.transform.eulerAngles = new Vector3(0, 90, 0);
         vehicleStyle.isSpecialColored = go.transform.GetComponent<BaseCar>().style.isSpecialColored; //Ugly but check the coloring from the prefab like this until we fix this
         tafficCreator.DecorateCarWithStyle(go, vehicleStyle);
 
- 
-        go.GetComponent<AIRacerController>().raceStatus.isStartingAtStartingLine = true;
+        var cntrl = go.GetComponent<AIRacerController>();
+        cntrl.raceStatus.isStartingAtStartingLine = true;
 
-        go.GetComponent<AIRacerController>().equipment = go.AddComponent<Equipment>(); //TESTAA
-        go.GetComponent<AIRacerController>().equipment.Init(2);
+        cntrl.equipment = go.AddComponent<Equipment>();
+        VehicleSpecs specs = new VehicleSpecs();
+        cntrl.equipment.Init(specs.GetVehicleSpecs(vehicleStyle.prefabName).weaponSlots);
+        cntrl.cargo.SetCarsSpecificCargoSettings(vehicleStyle.prefabName);
 
         totalNumberOfVehicles++;
         go.name = "Racer " + totalNumberOfVehicles;
+        go.transform.GetComponent<BaseCar>().temporaryWorkAroundRacerId = totalNumberOfVehicles - 1; //temp hack 
+        cntrl.Racer = new Racer(totalNumberOfVehicles - 1, "Dirty Harry", "Y0U-L0S3", true);
         go.GetComponent<PathController>().currentLaneIndex = startingLane;
         go.GetComponent<BaseCar>().status.isEngineOn = false;
-        //go.GetComponent<AIRacerController>().RefreshRoadObject(); //TEST
     }
-
-
 
     /// <summary>
     /// Instantiates a random car to a target lane
@@ -272,10 +306,12 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
         go.name = go.name.Replace("(Clone)", " " + totalNumberOfVehicles);
         go.GetComponent<AIBaseCar>().status.isEngineOn = true;
         TrafficVehicleController goController = go.GetComponent<TrafficVehicleController>();
+        goController.cargo.SetCarsSpecificCargoSettings(vehicleStyle.prefabName);
 
-        if (vehicleStyle.hasCargoSpace)
+        yield return new WaitForSeconds(1.0f);
+        if (vehicleStyle.HasCargoSpace)
         {
-            cargoCreator.InstantiateRandomCargo(go, goController.cargo);
+            InstantiateRandomCargo(go, goController.cargo);
         }
 
         yield return null;
@@ -287,26 +323,30 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
     /// <param name="laneIndex"></param>
     /// <param name="pos"></param>
     /// <returns></returns>
-    private IEnumerator InstantiateRandomVehicle(int laneIndex, float pos)
+    private IEnumerator InstantiateRandomVehicle(int laneIndex, float posZ)
     {
         vehicleStyle = tafficCreator.PickRandomVehicle();
-        pos += vehicleStyle.AddDistanceIfNeeded(ref currentInstantiationDistance); //ugly, but will do for now
-        GameObject go = Instantiate(Resources.Load(String.Format("{0}{1}", folderInResourcesVehicles, vehicleStyle.prefabName.ToString())), new Vector3(lanes[laneIndex].transform.position.x, instantiationHeight, pos), Quaternion.identity) as GameObject;
+        posZ += vehicleStyle.AddDistanceIfNeeded(ref currentInstantiationDistance); //ugly, but will do for now
+        instantiationHeight = DefaultInstantiationHeight;
+        instantiationHeight = vehicleStyle.FixHeightIfNeeded(instantiationHeight);
+
+        GameObject go = Instantiate(Resources.Load(String.Format("{0}{1}", folderInResourcesVehicles, vehicleStyle.prefabName.ToString())), new Vector3(lanes[laneIndex].transform.position.x, instantiationHeight, posZ), Quaternion.identity) as GameObject;
+        TrafficVehicleController goController = go.GetComponent<TrafficVehicleController>();
         vehicleStyle.isSpecialColored = go.transform.GetComponent<BaseCar>().style.isSpecialColored; //Ugly but check the coloring from the prefab like this until we fix this
         tafficCreator.DecorateCarWithStyle(go, vehicleStyle);
         go.GetComponent<PathController>().currentLaneIndex = laneIndex;
         go.transform.parent = trafficObject;
-        //go.GetComponent<AIBaseCar>().raceStatus.isStartingAtStartingLine = false; //TODO: remove this when you get normal traffic car prefabs
         totalNumberOfVehicles++;
         go.name = go.name.Replace("(Clone)", " " + totalNumberOfVehicles);
-        TrafficVehicleController goController = go.GetComponent<TrafficVehicleController>();
+        goController.cargo.SetCarsSpecificCargoSettings(vehicleStyle.prefabName); //TODO: possibly preload into prefab?
 
-        yield return new WaitForSeconds(1.5f); //Have to wait so the car is absolut still for the cargo
-        //if (vehicleStyle.hasCargoSpace)
-        //{
-        //    InstantiateRandomCargo(go, goController.cargo);
-        //}
-        go.GetComponent<AIBaseCar>().status.isEngineOn = true;
+        yield return new WaitForSeconds(1.0f);
+        if (vehicleStyle.HasCargoSpace)
+        {
+            InstantiateRandomCargo(go, goController.cargo);
+        }
+
+        goController.GetComponent<AIBaseCar>().status.isEngineOn = true;
 
         yield return null;
     }
@@ -317,30 +357,34 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
     /// <param name="laneIndex"></param>
     /// <param name="pos"></param>
     /// <returns></returns>
-    private IEnumerator InstantiateRandomVehicleTempSolution(int laneIndex, float pos)
+    private IEnumerator InstantiateRandomVehicleTempSolution(int laneIndex, float posZ)
     {
         vehicleStyle = tafficCreator.PickRandomVehicle();
         if (vehicleStyle.prefabName == CarPrefabName.CargoTruck_Prefab | vehicleStyle.prefabName == CarPrefabName.Metrobus_Prefab) //Wait some extra time if long vehicle. RODO Later a better solution
         {
             yield return new WaitForSeconds(10);
         }
-        pos += vehicleStyle.AddDistanceIfNeeded();
-        GameObject go = Instantiate(Resources.Load(String.Format("{0}{1}", folderInResourcesVehicles, vehicleStyle.prefabName.ToString())), new Vector3(lanes[laneIndex].transform.position.x, instantiationHeight, pos), Quaternion.identity) as GameObject;
+        posZ += vehicleStyle.AddDistanceIfNeeded();
+        instantiationHeight = DefaultInstantiationHeight;
+        instantiationHeight = vehicleStyle.FixHeightIfNeeded(instantiationHeight);
+        GameObject go = Instantiate(Resources.Load(String.Format("{0}{1}", folderInResourcesVehicles, vehicleStyle.prefabName.ToString())), new Vector3(lanes[laneIndex].transform.position.x, instantiationHeight, posZ), Quaternion.identity) as GameObject;
         TrafficVehicleController goController = go.GetComponent<TrafficVehicleController>();
 
         tafficCreator.DecorateCarWithStyle(go, vehicleStyle);
         go.GetComponent<PathController>().currentLaneIndex = laneIndex;
         go.transform.parent = trafficObject;
-        goController.raceStatus.isStartingAtStartingLine = false; //TODO: remove this when you get normal traffic car prefabs
+        goController.raceStatus.isStartingAtStartingLine = false;
         totalNumberOfVehicles++;
         go.name = go.name.Replace("(Clone)", " " + totalNumberOfVehicles);
         go.GetComponent<AIBaseCar>().status.isEngineOn = true;
+        goController.cargo.SetCarsSpecificCargoSettings(vehicleStyle.prefabName);
 
-        yield return new WaitForSeconds(1.5f); //Have to wait so the car is absolut still for the cargo
-        //if (vehicleStyle.hasCargoSpace)
-        //{
-        //    InstantiateRandomCargo(go, goController.cargo);
-        //}
+
+        yield return new WaitForSeconds(1.0f);
+        if (vehicleStyle.HasCargoSpace)
+        {
+            InstantiateRandomCargo(go, goController.cargo);
+        }
 
         goController.status.isEngineOn = true;
         yield return null;
@@ -363,8 +407,6 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
         }
     }
 
-
-
     IEnumerator PopulateLane(int laneIndex, int startPos)
     {
         int carCount = UnityEngine.Random.Range(spawnCarCountMin, spawnCarCountMax); //car count of each lane can be limited 
@@ -373,43 +415,11 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
         {
             StartCoroutine(InstantiateRandomVehicle(laneIndex, currentInstantiationDistance));
             currentInstantiationDistance += UnityEngine.Random.Range(minDistanceBetweenVehicles, maxDistanceBetweenVehicles);
-            //TODO: temp if, get rid off:
-            //if (currentInstantiationDistance > VideoSettings.DefaultVisionRangeAtRoadLevel + 500) //+500, A bit more for testing 
-            //{
-            //    Debug.Log("PopulateLane visionRange exeeded. Rest of the cars wont be created. Cars left:" + (carCount - 1).ToString());
-            //    yield break;
-            //}
         }
         yield return null;
     }
 
-
-
-    /// <summary>
-    /// This is quite tricky. Dont go under 10 seconds or the raycast check will remove it
-    /// </summary>
-    /// <returns></returns>
-    public IEnumerator StartReleasingCars()
-    {
-        yield return new WaitForSeconds(1); //needed
-        //earlySpawningPos = 0; //start the spawning pos  ////Creates a small time cap for the AI racers enter the motorway
-
-        //Less in the opposite side, meaning rarely
-        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 0));
-        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 1));
-        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 2));
-        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 3));
-
-        //remember to wait a sec
-        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 4));
-        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 5));
-        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 6));
-        StartCoroutine(ReleaseWaveRoadBeginning(earlySpawningPos, WaveType.Casual, 7));
-
-        yield return null;
-    }
-
-
+  
 
     /// <summary>
     /// Todo when time
@@ -462,8 +472,6 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
     /// <returns></returns>
     private IEnumerator ReleaseWaveRoadBeginning(float roadPosition, WaveType waveType, int laneIndex, float waitSeconds = -1)
     {
-        // CarPrefabName previousCar = CarPrefabName.Camaro_Prefab; //short car for default
-
         if (waitSeconds == -1)
         {
             waitBeforeRelease = UnityEngine.Random.Range(7, 12);
@@ -474,7 +482,7 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
         {
             if (waitSeconds == -1)
             {
-                waitBeforeRelease = My.rand.Next(7, 12); //truly random
+                waitBeforeRelease = My.rand.Next(7, 12);
             }
 
             yield return new WaitForSeconds(waitBeforeRelease); //TODO: SCRAP YOU PLAN or create table or each lane bool lane1free, bool lane2free.....
@@ -486,32 +494,6 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
         yield return null;
     }
 
-
-    public IEnumerator PopulateVisibleMotorway()
-    {
-        //Less in the opposite side
-        yield return StartCoroutine(PopulateLane(0, earlySpawningPos));
-        yield return StartCoroutine(PopulateLane(2, earlySpawningPos));
-        yield return StartCoroutine(PopulateLane(3, earlySpawningPos));
-
-        yield return StartCoroutine(PopulateLane(4, earlySpawningPos));
-        yield return StartCoroutine(PopulateLane(5, earlySpawningPos));
-        yield return StartCoroutine(PopulateLane(6, earlySpawningPos));
-        yield return StartCoroutine(PopulateLane(7, earlySpawningPos));
-
-        //Further as well
-        //Add parameter for cor count to the lane
-        currentInstantiationDistance = 0; //zero this
-
-        //Some a bit further as well
-        yield return StartCoroutine(PopulateLane(4, 4000));  //jump on this lane so, avoid it for now
-        yield return StartCoroutine(PopulateLane(5, 2700));
-        yield return StartCoroutine(PopulateLane(6, 2500));
-        yield return StartCoroutine(PopulateLane(7, 3000));
-
-        //TODO: release them later!
-    }
-
     #endregion
 
     /// <summary>
@@ -521,10 +503,19 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
     /// <param name="vehicleCargo"></param>
     /// <param name="index"></param>
     /// <returns></returns>
-    public IEnumerator InstantiateItemInCargo(GameObject targetVehicle, Cargo vehicleCargo, int index)
+    public IEnumerator InstantiateItemInCargo(GameObject targetVehicle, Cargo vehicleCargo, int index, bool mightBePowerUpItem)
     {
-        var randomItem = cargoCreator.itemCreator.PickRandomItem().ToString();
-        Debug.Assert(randomItem != null);
+        string randomItem = "";
+        if (mightBePowerUpItem)
+        {
+            randomItem = cargoCreator.PickItem(vehicleCargo, true).ToString();
+        }
+        else
+        {
+            randomItem = cargoCreator.PickItem(vehicleCargo, false).ToString();
+        }
+        Debug.Assert(randomItem != "", "string is empty");
+
         try
         {
             GameObject go = Instantiate(Resources.Load(String.Format("{0}{1}", CargoCreator.folderInResourcesCargo, randomItem)),
@@ -533,15 +524,55 @@ public class VehicleSpawner : Singleton<VehicleSpawner>, ICargoCreator
                         targetVehicle.transform.position.z + vehicleCargo.cargoPositions[index].z), Quaternion.identity) as GameObject;
             go.transform.parent = targetVehicle.transform.GetComponent<BaseCar>().visualsObjectInHierarchy.transform;
 
-            vehicleCargo.AddCargoItem(go.transform.GetComponent<Item>()); //TODO: remove the GetComponent
+            vehicleCargo.AddCargoItem(go.transform.GetComponent<Item>());
         }
         catch (NullReferenceException e)
         {
             Debug.Log("FAILED!:" + randomItem);
-
         }
 
         //NOTE: the default is kinematic = true! at least should!
         yield return null;
     }
+
+    int itemCounter;
+    public void InstantiateRandomCargo(GameObject targetVehicle, Cargo vehicleCargo)
+    {
+
+        bool mightBePowerUpItem = true;
+        int cargoCount = 0;
+        try
+        {
+            cargoCount = vehicleCargo.GetItemCount();
+        }
+        catch(Exception e)
+        {
+           //TODO: High likely its the vehicle terminator
+           Debug.Log(targetVehicle.name + "FAILEEDDDDDDDDDDDD");
+           return;
+        }
+      
+        //The never ending chewingum: Alteration ultil spring balance issue is fixed!
+        if (targetVehicle.GetComponent<AIBaseCar>().style.prefabName == CarPrefabName.MiniCargoTruck_Prefab)
+        {
+            if (cargoCount % 2 != 0)
+            {
+                return;
+            }
+        }
+
+        itemCounter = 0;
+        for (int i = 0; i < cargoCount; i++) //create a coroutine?
+        {
+            if (itemCounter >= vehicleCargo.numberOfPowerUps)
+            {
+                mightBePowerUpItem = false;
+            }
+           
+            StartCoroutine(InstantiateItemInCargo(targetVehicle, vehicleCargo, i, mightBePowerUpItem));
+            itemCounter++;
+            numberOfCargoObjects++;
+        }
+    }
 }
+

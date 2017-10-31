@@ -4,8 +4,6 @@ using System.Collections;
 using UnityEditor;
 using UnityEngine;
 
-
-
 //********************************** A hack
 public class ReadOnlyAttribute : PropertyAttribute
 {
@@ -36,8 +34,8 @@ public abstract class BaseCar : RoadObject
 
     [Header("MUST BE SET IN INSPECTOR")]
     //[SerializeField]
-    public CarCategory carCategory; //TODO:put this to VehicleStyle class if you can
-    public VehicleStyle style; //TODO: Get rid off. Class is only for debugging:
+    public CarCategory carCategory; //TODO:put this to VehicleStyle class when you have time
+    public VehicleStyle style;
 
     [Header("Set by programmatically")]
     [ReadOnly] public CarSpecs specs;
@@ -49,7 +47,6 @@ public abstract class BaseCar : RoadObject
     public Texture2D textureNormal;
     public Texture2D textureBreaking;
     public Renderer carRenderer;
-    //public Material sharedMaterialLights;
     [Header("taillights texture")]
     public Material materialLights;
     public GameObject visualsObjectInHierarchy;
@@ -64,12 +61,20 @@ public abstract class BaseCar : RoadObject
     [HideInInspector] public float motorTorqueMax;
     [ReadOnlyAttribute] public float currentSpeed;
     [SerializeField]
-    public float rigidBodySpeedKmH; //rigdig.velocity.magnitude * 3.6f
+    private float rigidBodySpeedKmHForEngine; //rigdig.velocity.magnitude * 3.6f
+    public float RigidBodySpeedKmHForEngine
+    {
+        get { return rigidBodySpeedKmHForEngine; }
+        set { rigidBodySpeedKmHForEngine = value; }
+    }
+
+    private float rigidBodySpeedKmH;
     public float RigidBodySpeedKmH
     {
         get { return rigidBodySpeedKmH; }
         set { rigidBodySpeedKmH = value; }
     }
+
     public float CurrentSpeed //Player uses different formula, because the drivetrain. For AI cars the speed is calculated by formula: 2 * Mathf.PI * wheelFL.radius * 60 / 1000 * wheelRL.rpm;
     {
         get { return currentSpeed; }
@@ -98,13 +103,11 @@ public abstract class BaseCar : RoadObject
     [HideInInspector] public float maxBrakeTorgue;
 
     [Header("Physics")]
-    //[SerializeField]
-    //[ReadOnly] bool isGrounded;
-    [HideInInspector] public float simpleDistToGround = 4;
+    [HideInInspector]
+    public float simpleDistToGround;
 
     //  public Rigidbody rigdig;
     [HideInInspector] public float yawSpeed;
-    //[HideInInspector] public Vector3 centerOfMass;
 
     //precalculated values;
     public float wheelSpinningWithoutRpm;
@@ -115,7 +118,6 @@ public abstract class BaseCar : RoadObject
     public WheelType wheelType;
     public WheelCollider[] poweringWheels;
 
-    //Put on separateClass
     //MISC & Temp:
     protected float lifeTime = GameSettings.deathTimer;
     protected bool isDeathTimerOn = false;
@@ -130,34 +132,33 @@ public abstract class BaseCar : RoadObject
     [SerializeField]
     public bool justKeeptStillForDebugging = false;
 
-    //public void CalculateRigidBodySpeed()
-    //{
-    //    rigidBodySpeedKmH = rigdig.velocity.magnitude * 3.6f;
-    //}
- 
-
-    public void Init(bool isAIDriving)
+    public void CalculateRigidBodySpeed()
     {
+        rigidBodySpeedKmHForEngine = rigid.velocity.magnitude * 3.6f;
+    }
+
+    public void Init(bool isAIDriving, InitType type)
+    {     
         if (carCategory == CarCategory.NotSet)
         {
-            throw new Exception("carCategory cannot be 'Notset' and must be set explicitly from Inspector!");
+            throw new Exception("carCategory cannot be 'Notset' and must be set explicitly from Inspector for each vehicle!");
         }
 
-        if (rigid == null) //Just a test
-        {
-            rigid = gameObject.GetComponentInChildren<Rigidbody>();
-        }
-
-        //visuals.materialLights = visuals.carRenderer.materials[2]; //TODO
         CarSettings carSettings = CarData.GetCarSettings(carCategory, isAIDriving);
-        IntializeDrivingSettings(carSettings);
-        SetCarWheelType(carSettings.wheelType);
-        sensors = new Sensors(carCategory);
+        CarData.PopulateCarSettings(gameObject, carSettings, type);
+        SetUniveralsSettings(carSettings);
         PreCalculateFunctions();
     }
 
-    public void SetCarWheelType(WheelType t)
+    public void SetUniveralsSettings(CarSettings carSettings)
     {
+        SetCarWheelType(carSettings.wheelType);
+        sensors = new Sensors(carCategory);
+    }
+
+    protected void SetCarWheelType(WheelType t)
+    {
+        wheelType = t;
         switch (t)
         {
             case WheelType.FWD:
@@ -182,7 +183,6 @@ public abstract class BaseCar : RoadObject
                 break;
         }
     }
-
 
     public void StartDeathCalculator()
     {
@@ -209,7 +209,7 @@ public abstract class BaseCar : RoadObject
 
     public void GameOver()
     {
-        if (raceStatus.isStartingAtStartingLine) //TODO erase this check, checking if its a racer for now
+        if (raceStatus.isStartingAtStartingLine) //TODO erase this check
         {
             print("Its game over for racer " + gameObject.name);
         }
@@ -219,25 +219,17 @@ public abstract class BaseCar : RoadObject
         StartCoroutine(DisableCalculatorAfter(5));
     }
 
-    //TODO rewrite when time
-    public void IntializeDrivingSettings(CarSettings settings)
+    protected void PreCalculateFunctions()
     {
-        CarData.PopulateCarSettings(gameObject, settings);
-
-		//TODO: chewing gum fixhack
-		maxSteerAngle = settings.maxSteerAngle;
-		turnSpeed = settings.turnSpeed;
-        maxBrakeTorgue = settings.maxBrakeTorgue;
-
-    }
-
-    private void PreCalculateFunctions()
-    {
-        
         wheelSpinningWithoutRpm = 2 * Mathf.PI * wheelFL.radius * 60 / 1000;
-        //wheelSpinningWithoutRpm = 2 * Mathf.PI * poweringWheels[0].radius * 60 / 1000;  //TODO REMEMBER THIS  !!poweringWheels[0].radius
     }
 		
+    public void SetSteeringAngle_SteeringWheel(float targetAngle)
+    {
+        wheelFL.steerAngle = targetAngle;
+        wheelFR.steerAngle = targetAngle;
+    }
+ 
     public void LerpToSteeringAngle(float targetAngle, bool aiDriving)
     {
         wheelFL.steerAngle = Mathf.Lerp(wheelFL.steerAngle, targetAngle, Time.deltaTime * turnSpeed);
@@ -253,14 +245,11 @@ public abstract class BaseCar : RoadObject
         return Physics.Raycast(gameObject.transform.position, -gameObject.transform.up, simpleDistToGround);
     }
 
+
+
   
     public bool OnUpsideDown()
     {
-
-        //if (transform.up.y < -0.93f)
-        //{
-        //    return true;
-        //}
 
         if (Vector3.Dot(transform.up, Vector3.down) > 0)
         {
@@ -322,8 +311,11 @@ public abstract class BaseCar : RoadObject
     {
         wheelFR.brakeTorque = brakingForce;
         wheelFL.brakeTorque = brakingForce;
-        wheelRL.motorTorque = brakingForce; //just a test
-        wheelRR.motorTorque = brakingForce; //just a test
+
+        foreach (WheelCollider w in poweringWheels)
+        {
+            w.brakeTorque = brakingForce;
+        }
     }
 
 
@@ -338,13 +330,6 @@ public abstract class BaseCar : RoadObject
         {
             poweringWheels[i].motorTorque = -motorTorqueMax;
         }
-
-        //wheelRL.motorTorque = -motorTorqueMax;
-        //wheelRR.motorTorque = -motorTorqueMax;
-        //if (materialLights.mainTexture == textureBreaking) //or equals?
-        //{
-        //    materialLights.mainTexture = textureNormal; //switch breaking texture to normal when reversing
-        //}
     }
 
     public void OnThrottle()
@@ -357,34 +342,15 @@ public abstract class BaseCar : RoadObject
     public void OnReleaseBrake()
     {
         status.isBraking = false;
+        status.handBrake = false;
         BrakeWithAllTires(0);
-        //sharedMaterialLights.mainTexture = textureNormal;
     }
-
-    //private void PanicBreak()
-    //{
-    //    if (Input.GetButton("BrakeOrReverse"))
-    //    {
-    //        OnPanicBrake();
-    //    }
-    //    else
-    //    {
-    //        wheelFR.brakeTorque = 0;
-    //        wheelFL.brakeTorque = 0;
-    //        wheelRR.brakeTorque = 0;
-    //        wheelRL.brakeTorque = 0;
-    //    }
-    //}
 
     public void OnHandBrake()
     {
+        status.handBrake = true;
         status.isBraking = true;
         status.isReverse = false;
-        //wheelRL.motorTorque = 0;
-        //wheelRR.motorTorque = 0;
-
-        //wheelFR.brakeTorque = maxBrakeTorgue;
-        //wheelFL.brakeTorque = maxBrakeTorgue;
         wheelRR.brakeTorque = maxBrakeTorgue;
         wheelRL.brakeTorque = maxBrakeTorgue;
         //sharedMaterialLights.mainTexture = textureBreaking;
@@ -392,12 +358,6 @@ public abstract class BaseCar : RoadObject
         //TODO: Check if you hit something while you brake, if the car hits something its caput/driver is in shock
     }
 
-    //protected void OnUpsideDownOrSide()
-    //{
-    //    status.SetAllBoolsToFalse();
-    //    status.isInTrouble = true;
-    //    //Stop engine or something more fun. Set smoke and put on fire
-    //}
 
     #endregion
 
